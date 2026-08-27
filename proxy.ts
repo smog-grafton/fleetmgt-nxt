@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AUTH_COOKIE } from '@/lib/auth/constants';
 
 const PUBLIC_PATHS = ['/login', '/forgot-password', '/reset-password'];
-const QUICK_ENTRY_PATHS = [
-  '/quick-remittance/',
-  '/quick-finance/',
-  '/quick-attendance/',
+const QUICK_TOOL_ROOTS = [
+  '/quick-remittance',
+  '/quick-income',
+  '/quick-expense',
+  '/quick-finance',
+  '/quick-attendance',
 ];
 
 export type RouteAccess = 'public' | 'quick-entry' | 'protected';
@@ -17,7 +19,11 @@ export function routeAccess(pathname: string): RouteAccess {
     )
   )
     return 'public';
-  if (QUICK_ENTRY_PATHS.some((path) => pathname.startsWith(path)))
+  if (
+    QUICK_TOOL_ROOTS.some(
+      (root) => pathname === root || pathname.startsWith(`${root}/`),
+    )
+  )
     return 'quick-entry';
   return 'protected';
 }

@@ -1,6 +1,6 @@
 import { openQuickEntry } from '@/lib/quick-entry';
 
-export default async function QuickRemittancePage({
+export default async function QuickIncomePage({
   params,
   searchParams,
 }: {
@@ -9,9 +9,5 @@ export default async function QuickRemittancePage({
 }) {
   const { token } = await params;
   const { q } = await searchParams;
-  return openQuickEntry(
-    'quick-remittance',
-    token,
-    Array.isArray(q) ? q[0] : q,
-  );
+  return openQuickEntry('quick-income', token, Array.isArray(q) ? q[0] : q);
 }
