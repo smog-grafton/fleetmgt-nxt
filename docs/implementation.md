@@ -33,7 +33,7 @@ The browser never receives the Laravel bearer token. Login stores it in `zuri_op
 - Forty-five schema-driven resource workspaces use the Laravel catalog/schema contract for server paging, search, sorting, filters, field lookups, validation, CRUD drawers, document/image upload, record detail, workflow actions, and guarded deletion.
 - Remittance has dedicated dashboard, assigned-driver list, driver/rider profile, payment capture, welfare preview, allocation recalculation, mistaken-payment reversal, and future-allocation repair workflows.
 - Academy has a multi-step driver registration flow and dynamic testing checklist.
-- Operations settings mask stored secrets; blank secret submissions preserve the configured value.
+- Operations settings show current quick-tool tokens only to authorized settings administrators; blank rotation submissions preserve the configured value.
 - Super Admin has dedicated user and role/permission management.
 - Health and catalog workspaces expose API/runtime status to authorized operators.
 

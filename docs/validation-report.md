@@ -31,4 +31,4 @@ Validation date: 2026-08-27 (Africa/Kampala)
 - Auth cookie is HTTP-only, same-site, secure in production, and cleared on logout/failed session refresh.
 - Mutations through the BFF require double-submit CSRF validation.
 - Laravel performs domain authorization and input validation independently of the UI.
-- Stored secret settings are masked and cannot be read back through the settings endpoint.
+- Quick-tool tokens are returned only through the permission-protected settings endpoint so authorized administrators can copy their scoped links; editable secret fields remain blank until rotation.
