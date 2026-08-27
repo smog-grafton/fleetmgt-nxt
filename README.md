@@ -1,66 +1,45 @@
-# Metronic 9 | All-in-One Tailwind based HTML/React/Next.js Template for Modern Web Applications
+# Zuri Management V2
 
-## Getting Started
+The Next.js administration console for Zuri Ride's Operations V2 platform. It is built from the locally installed Metronic 9.5/ReUI starter kit and communicates with the Laravel application exclusively through `/api/v2`.
 
-The official [Metronic Next.js Documentation](https://docs.keenthemes.com/metronic-nextjs) will be released soon,
-alongside the stable Metronic release, expected within the next week.
+## Requirements
 
-### Prerequisites
+- Node.js 24 (see `.nvmrc`)
+- npm
+- The Laravel application at `/Applications/XAMPP/xamppfiles/htdocs/zurimgt/framework`
+- A configured Laravel Passport installation and mail transport
 
-- Node.js 16.x or higher
-- Npm or Yarn
-- Tailwind CSS 4.x
-- React 19.x
-- Next.js 15.3.x
-- PostgreSQL 17.4.x
-
-## ReUI Components
-
-Metronic now leverages [ReUI](https://v1.reui.io), our open-source React component library.
-
-Star the [ReUI on GitHub](https://github.com/keenthemes/reui) to help us grow the project and stay updated on new features!
-
-### Installation
-
-To set up the project dependencies, including those required for React 19, use the `--force` flag to resolve any dependency conflicts:
+## Local setup
 
 ```bash
-npm install --force
-```
-
-### Database Deployment
-
-This will create the necessary tables in database for user authorization and user management apps :
-
-```bash
-npx prisma db push
-```
-
-Once your schema is deployed, you need to generate the Prisma Client:
-
-```bash
-npx prisma generate
-```
-
-### Development
-
-Start the development server:
-
-```bash
+nvm use
+npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-### Setting Up the Demo Layout
+The default frontend is `http://localhost:3000`. Set the Laravel `.env` value below so password-reset emails return users to this application:
 
-Open `app/(protected)/layout.tsx` and change `Demo1Layout` to any demo, for example, `Demo5Layout` and you will switch entire app layout to the selected demo.
-
-```bash
-<Demo5Layout>
-	{children}
-</Demo5Layout>
+```dotenv
+OPS_ADMIN_URL=http://localhost:3000
 ```
 
-### Reporting Issues
+The only browser-visible configuration is the app name, currency, and optional base path. `LARAVEL_API_URL` is server-only. Passport tokens are held in an HTTP-only, same-site cookie by the Next.js BFF and are never exposed to browser JavaScript.
 
-If you encounter any issues or have suggestions for improvement, please contact us at [support@keenthemes.com](mailto:support@keenthemes.com).
-Include a detailed description of the issue or suggestion, and we will work to address it in the next stable release.
+## Commands
+
+```bash
+npm run dev        # local development
+npm run check      # lint, typecheck, and production build
+npm run build      # optimized production bundle
+npm start          # serve the production bundle
+```
+
+## Design and ownership
+
+- Metronic/ReUI components and tokens are the design system; the removed 39 vendor demo layouts are preserved in Git history.
+- Laravel is the system of record and owns authorization, validation, remittance allocation, payroll, finance, and settlement calculations.
+- Next.js owns the responsive operator experience, route composition, tables, drawers, filters, charts, and workflow orchestration.
+- Every protected request travels browser → same-origin Next.js BFF → Passport-protected Laravel API.
+
+See [implementation.md](docs/implementation.md), [route-migration-matrix.md](docs/route-migration-matrix.md), and [validation-report.md](docs/validation-report.md).

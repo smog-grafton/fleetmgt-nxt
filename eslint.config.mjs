@@ -1,29 +1,34 @@
-// eslint.config.mjs
-import { FlatCompat } from '@eslint/eslintrc';
+import { defineConfig, globalIgnores } from 'eslint/config';
+import nextVitals from 'eslint-config-next/core-web-vitals';
+import nextTypeScript from 'eslint-config-next/typescript';
+import prettier from 'eslint-config-prettier/flat';
+import reactHooks from 'eslint-plugin-react-hooks';
 
-// Create a FlatCompat instance to support legacy "extends" syntax.
-const compat = new FlatCompat({
-  baseDirectory: import.meta.dirname,
-});
-
-const eslintConfig = [
-  ...compat.config({
-    extends: ['next/core-web-vitals', 'next/typescript', 'prettier'],
-    // Plugins in legacy format must be an array of plugin names.
-    plugins: ['react-hooks'],
+export default defineConfig([
+  ...nextVitals,
+  ...nextTypeScript,
+  prettier,
+  {
+    files: ['**/*.{js,mjs,cjs,jsx,ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
     rules: {
-      // Disable react-in-jsx-scope (not needed in React 17+)
-      'react/react-in-jsx-scope': 'off',
-      'react/no-unescaped-entities': 'off',
-      // React Hooks rules
+      // Metronic 9.5 predates the React Compiler lint additions enabled by
+      // Next 16. Keep the established Hooks safety rules, but do not treat
+      // compiler-optimization hints as correctness failures.
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
-      '@next/next/no-img-element': 'off',
+      'react-hooks/incompatible-library': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/set-state-in-effect': 'off',
     },
-  }),
-  {
-    ignores: ['.next/**', 'node_modules/**', 'prisma/**'],
   },
-];
-
-export default eslintConfig;
+  globalIgnores([
+    '.next/**',
+    'out/**',
+    'build/**',
+    'node_modules/**',
+    'prisma/**',
+    'next-env.d.ts',
+  ]),
+]);

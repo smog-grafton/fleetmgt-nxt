@@ -1,19 +1,17 @@
 import { ReactNode, Suspense } from 'react';
-import { Inter } from 'next/font/google';
-import { cn } from '@/lib/utils';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
+import { AppProviders } from '@/providers/app-providers';
 
 import '@/styles/globals.css';
-const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
   title: {
-    template: '%s | Metronic',
-    default: 'Metronic', // a default is required when creating a template
+    template: '%s | Zuri Management',
+    default: 'Zuri Management V2',
   },
+  description: 'Zuri Ride operations, people, remittance, fleet and finance management.',
 };
 
 export default async function RootLayout({
@@ -23,25 +21,22 @@ export default async function RootLayout({
 }) {
   return (
     <html className="h-full" suppressHydrationWarning>
-      <body
-        className={cn(
-          'antialiased flex h-full text-base text-foreground bg-background',
-          inter.className,
-        )}
-      >
+      <body className="min-h-full bg-background text-base text-foreground antialiased">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
-          storageKey="nextjs-theme"
+          storageKey="zuri-management-theme"
           enableSystem
           disableTransitionOnChange
           enableColorScheme
         >
           <TooltipProvider delayDuration={0}>
-            <Suspense>{children}</Suspense>
+            <AppProviders>
+              <Suspense>{children}</Suspense>
+            </AppProviders>
             <Toaster />
           </TooltipProvider>
-        </ThemeProvider>       
+        </ThemeProvider>
       </body>
     </html>
   );
