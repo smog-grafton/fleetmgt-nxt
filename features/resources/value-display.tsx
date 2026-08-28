@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { formatDate, formatDateTime } from '@/lib/helpers';
 
 const statusWords = new Set([
   'active',
@@ -48,9 +49,11 @@ export function formatLabel(value: string) {
 export function ValueDisplay({
   value,
   field,
+  lookup,
 }: {
   value: unknown;
   field?: string;
+  lookup?: Record<string, string>;
 }) {
   if (value === null || value === undefined || value === '')
     return <span className="text-muted-foreground">—</span>;
@@ -66,7 +69,8 @@ export function ValueDisplay({
         {JSON.stringify(value)}
       </span>
     );
-  const text = String(value);
+  const rawText = String(value);
+  const text = lookup?.[rawText] ?? rawText;
   const normalized = text.toLowerCase();
   if (
     field?.match(/status|state|stage|result|severity|direction|type$/) ||
@@ -86,6 +90,12 @@ export function ValueDisplay({
         {formatLabel(text)}
       </Badge>
     );
+  }
+  if (field?.match(/(^|_)(date|on)$/)) {
+    return <span className="whitespace-nowrap">{formatDate(rawText)}</span>;
+  }
+  if (field?.match(/(^|_)(at|time)$/)) {
+    return <span className="whitespace-nowrap">{formatDateTime(rawText)}</span>;
   }
   return (
     <span className="line-clamp-2 max-w-72" title={text}>

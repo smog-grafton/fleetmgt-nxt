@@ -95,23 +95,43 @@ export function timeAgo(date: Date | string): string {
   return `${Math.floor(diff / 31536000)} year${Math.floor(diff / 31536000) > 1 ? 's' : ''} ago`;
 }
 
+const BUSINESS_TIME_ZONE = 'Africa/Kampala';
+
+function normalizeApiDate(input: Date | string | number): Date {
+  if (input instanceof Date) return input;
+  if (typeof input === 'string') {
+    const dateOnly = input.match(/^(\d{4}-\d{2}-\d{2})(?:T00:00:00(?:\.\d+)?Z)?$/);
+    if (dateOnly) return new Date(`${dateOnly[1]}T12:00:00+03:00`);
+
+    // Laravel may serialize microseconds while JavaScript accepts milliseconds.
+    return new Date(input.replace(/\.(\d{3})\d+(?=Z$)/, '.$1'));
+  }
+  return new Date(input);
+}
+
 export function formatDate(input: Date | string | number): string {
-  const date = new Date(input);
-  return date.toLocaleDateString('en-US', {
-    month: 'long',
+  const date = normalizeApiDate(input);
+  if (Number.isNaN(date.getTime())) return String(input);
+
+  return new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',
+    month: 'short',
     year: 'numeric',
-  });
+    timeZone: BUSINESS_TIME_ZONE,
+  }).format(date);
 }
 
 export function formatDateTime(input: Date | string | number): string {
-  const date = new Date(input);
-  return date.toLocaleString('en-US', {
-    month: 'long',
+  const date = normalizeApiDate(input);
+  if (Number.isNaN(date.getTime())) return String(input);
+
+  return new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',
+    month: 'short',
     year: 'numeric',
     hour: 'numeric',
-    minute: 'numeric',
+    minute: '2-digit',
     hour12: true,
-  });
+    timeZone: BUSINESS_TIME_ZONE,
+  }).format(date);
 }

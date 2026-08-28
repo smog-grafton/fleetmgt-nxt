@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiGet, apiPost } from '@/lib/api/client';
+import { formatDate } from '@/lib/helpers';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -356,7 +357,7 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
                       {label}
                     </p>
                     <div className="mt-1 text-sm font-medium">
-                      <ValueDisplay value={value} field={label} />
+                      <ValueDisplay value={value} field={label === 'Last payment' ? 'last_payment_date' : label} />
                     </div>
                   </div>
                 ))}
@@ -403,9 +404,9 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
                     <p className="text-[10px] uppercase text-muted-foreground">
                       {label}
                     </p>
-                    <p className="mt-1 text-sm font-medium">
-                      {String(value ?? '—')}
-                    </p>
+                    <div className="mt-1 text-sm font-medium">
+                      <ValueDisplay value={value} field={label === 'Starts' ? 'starts_at' : label === 'Ends' ? 'ends_at' : label} />
+                    </div>
                   </div>
                 ))}
               </CardContent>
@@ -451,8 +452,8 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
               <div>
                 <CardTitle>Contract remittance calendar</CardTitle>
                 <CardDescription>
-                  {calendar.length} dated obligations; paused and off days are
-                  explicitly not due.
+                  {calendar.length} dated obligations; weekly periods remain
+                  scheduled and do not affect the amount owed until they end.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -460,7 +461,8 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Due</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Expected</TableHead>
                     <TableHead>Paid</TableHead>
@@ -472,7 +474,8 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
                 <TableBody>
                   {calendar.map((day) => (
                     <TableRow key={text(day, 'id')}>
-                      <TableCell>{text(day, 'remittance_date')}</TableCell>
+                      <TableCell className="whitespace-nowrap">{calendarPeriod(day)}</TableCell>
+                      <TableCell><ValueDisplay value={day.due_at || day.period_ends_on} field={day.due_at ? 'due_at' : 'period_ends_on'} /></TableCell>
                       <TableCell>
                         {formatLabel(text(day, 'day_type'))}
                       </TableCell>
@@ -530,7 +533,7 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
                 <TableBody>
                   {payments.map((payment) => (
                     <TableRow key={text(payment, 'id')}>
-                      <TableCell>{text(payment, 'payment_date')}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDate(text(payment, 'payment_date'))}</TableCell>
                       <TableCell>{money(payment.amount)}</TableCell>
                       <TableCell>{money(payment.allocated_amount)}</TableCell>
                       <TableCell>{money(payment.credit_amount)}</TableCell>
@@ -761,7 +764,7 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
                       id="frequency"
                       name="frequency"
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      defaultValue="daily"
+                      defaultValue={String(contract.remittance_frequency || contract.contract_type || 'daily')}
                     >
                       <option value="daily">Daily</option>
                       <option value="weekly">Weekly</option>
@@ -964,6 +967,7 @@ function DataCard({
 }
 
 function baseBalance(day: Row) {
+  if (['scheduled', 'not_due'].includes(String(day.status || ''))) return 0;
   const expected = Number(day.expected_amount || 0);
   const paid = Math.max(
     Number(day.actual_paid || 0) - Number(day.welfare_paid || 0),
@@ -974,4 +978,13 @@ function baseBalance(day: Row) {
     Number(day.waived_amount || 0) + Number(day.reduced_amount || 0),
   );
   return Math.max(expected - paid - waived, 0);
+}
+
+function calendarPeriod(day: Row) {
+  const starts = day.period_starts_on || day.remittance_date;
+  const ends = day.period_ends_on || starts;
+  if (!starts) return '—';
+  if (String(starts).slice(0, 10) === String(ends).slice(0, 10)) return formatDate(String(starts));
+
+  return `${formatDate(String(starts))} – ${formatDate(String(ends))}`;
 }
