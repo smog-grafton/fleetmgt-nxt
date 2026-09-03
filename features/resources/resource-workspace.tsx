@@ -22,7 +22,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Skeleton } from '@/components/ui/skeleton';
 import { ResourceDetails } from './resource-details';
 import { ResourceForm } from './resource-form';
-import { ValueDisplay } from './value-display';
+import { formatLabel, ValueDisplay } from './value-display';
 
 type DrawerState = { mode: 'create' } | { mode: 'edit' | 'view'; record: ResourceRecord } | null;
 
@@ -43,7 +43,42 @@ export function ResourceWorkspace({ resource, initialRecordId }: { resource: str
   const createDefaults = useMemo(() => schema ? Object.fromEntries(Object.keys(schema.fields).map((field) => [field, searchParams.get(field)]).filter((entry): entry is [string, string] => entry[1] !== null)) : {}, [schema, searchParams]);
   useEffect(() => { if (searchParams.get('create') === '1' && schema) setDrawer({ mode: 'create' }); }, [searchParams, schema]);
   useEffect(() => { if (!initialRecordId || !schema) return; void apiGet<ResourceRecord>(`resources/${resource}/${initialRecordId}`).then((result) => setDrawer({ mode: 'view', record: result.data })).catch(() => undefined); }, [initialRecordId, resource, schema]);
-  const actionMutation = useMutation({ mutationFn: ({ record, action }: { record: ResourceRecord; action: string }) => apiPost(`resources/${resource}/${record.id}/actions/${action}`), onSuccess: (result) => { toast.success(result.message); void queryClient.invalidateQueries({ queryKey: ['resource-list', resource] }); } });
+  const actionMutation = useMutation({
+    mutationFn: async ({ record, action }: { record: ResourceRecord; action: string }) => {
+      const path = `resources/${resource}/${record.id}/actions/${action}`;
+      const confirmations: Record<string, string> = {
+        repair_driver_arrears: 'REPAIR_DRIVER_ARREARS',
+        rebuild_contract_dues: 'REBUILD_DRIVER_DUES',
+        repair_payment_allocations: 'REPAIR_PAYMENT_ALLOCATIONS',
+        repair_future_paid_days: 'REPAIR_FUTURE_ALLOCATIONS',
+        sync_finance_records: 'SYNC_REMITTANCE_FINANCE',
+      };
+      if (confirmations[action]) {
+        const preview = await apiPost<Record<string, unknown>>(path, { dry_run: true });
+        const details = Object.entries(preview.data)
+          .filter(([, value]) => ['string', 'number'].includes(typeof value))
+          .slice(0, 10)
+          .map(([key, value]) => `${formatLabel(key)}: ${String(value)}`)
+          .join('\n');
+        if (!window.confirm(`${schema?.actions[action] || formatLabel(action)} preview\n\n${details}\n\nApply this repair now?`)) {
+          return preview;
+        }
+        return apiPost(path, { dry_run: false, confirmation: confirmations[action] });
+      }
+      if (action === 'delete_mistaken') {
+        if (!window.confirm('Reverse this payment and recalculate the driver balance? The original audit record is preserved.')) {
+          throw new Error('Payment reversal cancelled.');
+        }
+        return apiPost(path, { confirmation: 'DELETE_PAYMENT_BATCH' });
+      }
+      return apiPost(path);
+    },
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void queryClient.invalidateQueries({ queryKey: ['resource-list', resource] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
   const deleteMutation = useMutation({ mutationFn: (record: ResourceRecord) => apiDelete(`resources/${resource}/${record.id}`), onSuccess: (result) => { toast.success(result.message); setDeleting(null); void queryClient.invalidateQueries({ queryKey: ['resource-list', resource] }); } });
   const columns = useMemo<ColumnDef<ResourceRecord>[]>(() => {
     if (!schema) return [];
@@ -63,7 +98,7 @@ export function ResourceWorkspace({ resource, initialRecordId }: { resource: str
       {filterFields.length > 0 && <div className="flex flex-wrap items-center gap-2 border-b px-5 py-3"><Filter className="size-4 text-muted-foreground" />{filterFields.map(([name, field]) => <Select key={name} value={filters[name] || '__all__'} onValueChange={(value) => { setFilters((current) => ({ ...current, [name]: value === '__all__' ? '' : value })); setPagination((current) => ({ ...current, pageIndex: 0 })); }}><SelectTrigger className="w-48"><SelectValue placeholder={field.label} /></SelectTrigger><SelectContent><SelectItem value="__all__">All {field.label}</SelectItem>{Object.entries(schema.lookups[name]).filter(([value]) => value !== '').map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select>)}</div>}
       <CardContent className="p-0"><DataGrid table={table} recordCount={meta.total || 0} isLoading={listQuery.isFetching} tableLayout={{ columnsVisibility: true, columnsResizable: true, headerSticky: true }} emptyMessage={search || Object.values(filters).some(Boolean) ? 'No records match the current filters.' : `No ${schema.label.toLowerCase()} have been created.`}><DataGridContainer border={false}><div className="max-h-[62vh] overflow-auto"><DataGridTable /></div><div className="border-t px-4"><DataGridPagination sizes={[10, 25, 50, 100]} /></div></DataGridContainer></DataGrid></CardContent>
     </Card>
-    <Sheet open={Boolean(drawer)} onOpenChange={(open) => !open && setDrawer(null)}><SheetContent className="w-full gap-0 p-0 sm:max-w-2xl"><SheetHeader className="border-b px-6 py-5 text-start"><SheetTitle>{drawer?.mode === 'create' ? `Add ${schema.singular}` : drawer?.mode === 'edit' ? `Edit ${schema.singular}` : `${schema.singular} details`}</SheetTitle><SheetDescription>{drawer?.mode === 'view' ? `Record #${drawer.record.id}` : 'Fields and rules come from the live Laravel Operations V2 schema.'}</SheetDescription></SheetHeader>{drawer?.mode === 'view' ? <ResourceDetails schema={schema} record={drawer.record} onEdit={schema.capabilities?.update === false ? undefined : () => setDrawer({ mode: 'edit', record: drawer.record })} /> : drawer ? <ResourceForm schema={schema} record={drawer.mode === 'edit' ? drawer.record : null} defaults={drawer.mode === 'create' ? createDefaults : {}} onSaved={() => setDrawer(null)} onCancel={() => setDrawer(null)} /> : null}</SheetContent></Sheet>
+    <Sheet open={Boolean(drawer)} onOpenChange={(open) => !open && setDrawer(null)}><SheetContent className="w-full gap-0 p-0 sm:max-w-2xl"><SheetHeader className="border-b px-6 py-5 text-start"><SheetTitle>{drawer?.mode === 'create' ? `Add ${schema.singular}` : drawer?.mode === 'edit' ? `Edit ${schema.singular}` : `${schema.singular} details`}</SheetTitle><SheetDescription>{drawer?.mode === 'view' ? `Record #${drawer.record.id}` : 'Fields and rules come from the live Laravel Operations V2 schema.'}</SheetDescription></SheetHeader>{drawer?.mode === 'view' ? <ResourceDetails schema={schema} record={drawer.record} onEdit={schema.capabilities?.update === false ? undefined : () => setDrawer({ mode: 'edit', record: drawer.record })} onAction={(action) => actionMutation.mutate({ record: drawer.record, action })} actionBusy={actionMutation.isPending} /> : drawer ? <ResourceForm schema={schema} record={drawer.mode === 'edit' ? drawer.record : null} defaults={drawer.mode === 'create' ? createDefaults : {}} onSaved={() => setDrawer(null)} onCancel={() => setDrawer(null)} /> : null}</SheetContent></Sheet>
     <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this {schema.singular.toLowerCase()}?</AlertDialogTitle><AlertDialogDescription>This is permanent and may be blocked by Operations V2 integrity rules. Prefer status changes for auditable financial and operational records.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => deleting && deleteMutation.mutate(deleting)}>Delete record</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </div>;
 }

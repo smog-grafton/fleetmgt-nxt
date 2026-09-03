@@ -8,14 +8,19 @@ import {
   AlertTriangle,
   Banknote,
   Calculator,
+  Car,
   CalendarOff,
   CircleDollarSign,
+  Download,
+  ExternalLink,
+  FileText,
   Gavel,
   Pause,
   Play,
   RefreshCw,
   Scale,
   UserRound,
+  Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiGet, apiPost } from '@/lib/api/client';
@@ -74,6 +79,7 @@ interface Preview {
 }
 interface Profile {
   driver: Row & { id: number; person?: Row };
+  operational_profile: Row;
   ledger: Row;
   calendar: Row[];
   payments: Row[];
@@ -88,6 +94,9 @@ interface Profile {
   assignments: Row[];
   documents: Row[];
   incidents: Row[];
+  active_asset?: Row;
+  asset_warning?: string;
+  academy_assets: Row[];
 }
 
 const KPI_KEYS = [
@@ -128,6 +137,7 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
   const [action, setAction] = useState<Action | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [payload, setPayload] = useState<Row | null>(null);
+  const [repairBusy, setRepairBusy] = useState('');
   const query = useQuery({
     queryKey: ['remittance-profile', driverId],
     queryFn: () => apiGet<Profile>(`remittance/drivers/${driverId}`),
@@ -194,6 +204,25 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
     setPayload(normalized);
     previewAction.mutate(normalized);
   }
+  async function runRepair(label: string, path: string, confirmation: string, extra: Row = {}) {
+    setRepairBusy(label);
+    try {
+      const preview = await apiPost<Row>(path, { ...extra, dry_run: true });
+      const details = Object.entries(preview.data)
+        .filter(([, value]) => ['string', 'number'].includes(typeof value))
+        .slice(0, 8)
+        .map(([key, value]) => `${formatLabel(key)}: ${String(value)}`)
+        .join('\n');
+      if (!window.confirm(`${label} preview\n\n${details}\n\nApply this repair now?`)) return;
+      const result = await apiPost(path, { ...extra, dry_run: false, confirmation });
+      toast.success(result.message);
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `${label} failed.`);
+    } finally {
+      setRepairBusy('');
+    }
+  }
 
   if (query.isLoading)
     return (
@@ -219,7 +248,9 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
   const data = query.data.data;
   const { driver, ledger, calendar, payments } = data;
   const person = driver.person || {};
+  const profile = data.operational_profile || person;
   const contract = data.boda_contracts[0] || data.contracts[0] || {};
+  const asset = data.active_asset || {};
   const activePause = data.pauses.find(
     (row) => row.status === 'active' && !row.reversed_at,
   );
@@ -294,8 +325,13 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
             disabled={recalc.isPending}
           >
             <Calculator />
-            Recalculate
+            Recalculate this driver
           </Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Repair driver arrears', `remittance/drivers/${driverId}/repair-arrears`, 'REPAIR_DRIVER_ARREARS')}><Wrench />Repair arrears</Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Repair payment allocations', `remittance/drivers/${driverId}/repair-payment-allocations`, 'REPAIR_PAYMENT_ALLOCATIONS')}><Wrench />Repair allocations</Button>
+          {Boolean(contract.id) && <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Rebuild dues from contract start', `remittance/drivers/${driverId}/rebuild-dues`, 'REBUILD_DRIVER_DUES', { contract_id: contract.contract_id || contract.id, contract_source: contract.contract_id ? 'contract' : (contract.daily_rate !== undefined ? 'boda' : 'contract'), from: String(contract.start_date || contract.starts_at).slice(0, 10) })}><CalendarOff />Rebuild dues</Button>}
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Repair future paid days', 'remittance/repair-future-allocations', 'REPAIR_FUTURE_ALLOCATIONS', { driver_id: driverId })}><CalendarOff />Repair future paid days</Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Sync finance records', 'remittance/sync-finance', 'SYNC_REMITTANCE_FINANCE')}><RefreshCw />Sync finance</Button>
         </div>
       </div>
 
@@ -317,12 +353,7 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
             <TabsTrigger value="payments">Payments</TabsTrigger>
             <TabsTrigger value="rates">Rates & pauses</TabsTrigger>
             <TabsTrigger value="adjustments">Adjustments</TabsTrigger>
-            {data.assignments.length +
-              data.documents.length +
-              data.incidents.length >
-              0 && (
-              <TabsTrigger value="operations">Vehicle & documents</TabsTrigger>
-            )}
+            <TabsTrigger value="operations">Vehicle & documents</TabsTrigger>
             <TabsTrigger value="timeline">Audit timeline</TabsTrigger>
           </TabsList>
         </div>
@@ -340,15 +371,22 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-2">
                 {Object.entries({
-                  'Driver code': driver.driver_code,
-                  'Full name': person.full_name,
-                  Phone: person.phone,
-                  'Alternative phone': person.alternative_phone,
-                  Email: person.email,
-                  Address: person.address,
-                  'National ID / NIN': person.national_id_number,
-                  'Driver status': driver.approval_status,
-                  'Academy status': driver.academy_status,
+                  'Driver code': profile.driver_code,
+                  'Full name': profile.full_name,
+                  Phone: profile.phone,
+                  'Alternative phone': profile.alternative_phone,
+                  Address: profile.address,
+                  'National ID / NIN': profile.national_id_number,
+                  'Driving permit': profile.driving_permit_number,
+                  'Permit class': profile.driving_permit_class,
+                  'Permit expiry': profile.driving_permit_expiry_date,
+                  'Next of kin': profile.next_of_kin_name,
+                  'Next of kin relationship': profile.next_of_kin_relationship,
+                  'Next of kin phone': profile.next_of_kin_phone,
+                  'Next of kin address': profile.next_of_kin_address,
+                  'Contract status': profile.contract_status,
+                  'Remittance status': profile.remittance_status,
+                  'Academy status': profile.academy_status,
                   'Arrears days': ledger.days_in_arrears,
                   'Last payment': ledger.last_payment_date,
                 }).map(([label, value]) => (
@@ -412,6 +450,7 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
               </CardContent>
             </Card>
           </div>
+          {data.asset_warning ? <Card className="border-amber-500/30 bg-amber-500/[0.06]"><CardContent className="flex items-center gap-3 py-5"><AlertTriangle className="text-amber-600" /><p className="text-sm font-medium">{data.asset_warning}</p></CardContent></Card> : <Card><CardHeader><div><CardTitle>Active fleet asset</CardTitle><CardDescription>The vehicle attached to the current remittance contract.</CardDescription></div><Car className="text-primary" /></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Object.entries({ 'Vehicle name': [asset.make, asset.model].filter(Boolean).join(' '), Make: asset.make, Model: asset.model, 'Plate number': asset.number_plate, Color: asset.color, 'Asset code': asset.asset_code, 'Vehicle type': (asset.type as Row | undefined)?.display_name || (asset.type as Row | undefined)?.name, 'Ownership type': asset.ownership_type, 'Current status': asset.operational_status, 'Contract': contract.reference || contract.id, 'Assigned date': contract.start_date || contract.starts_at }).map(([label, value]) => <div key={label} className="rounded-lg border p-3"><p className="text-[10px] uppercase text-muted-foreground">{label}</p><ValueDisplay value={value} field={label.includes('date') ? 'starts_at' : label} /></div>)}</CardContent></Card>}
           <Card>
             <CardHeader>
               <div>
@@ -637,7 +676,7 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
             ]}
           />
         </TabsContent>
-        <TabsContent value="operations" className="grid gap-5 xl:grid-cols-3">
+        <TabsContent value="operations" className="grid gap-5 xl:grid-cols-2">
           <DataCard
             title="Assignments"
             description="Vehicle and operational allocation history."
@@ -650,18 +689,8 @@ export function RemittanceProfile({ driverId }: { driverId: number }) {
               'release_gate_status',
             ]}
           />
-          <DataCard
-            title="Documents"
-            description="Driver and contract evidence."
-            rows={data.documents}
-            columns={[
-              'title',
-              'document_number',
-              'verification_status',
-              'issue_date',
-              'expiry_date',
-            ]}
-          />
+          <DocumentsCard rows={data.documents} />
+          <DataCard title="Academy-tested assets" description="Vehicles captured or linked during driver testing." rows={data.academy_assets} columns={['asset_code', 'number_plate', 'make', 'model', 'ownership_type', 'operational_status']} />
           <DataCard
             title="Incidents"
             description="Incidents linked to this driver."
@@ -961,6 +990,43 @@ function DataCard({
             )}
           </TableBody>
         </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DocumentsCard({ rows }: { rows: Row[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>Driver documents</CardTitle>
+          <CardDescription>Academy, identity, guarantor, next-of-kin and contract evidence.</CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {rows.length ? rows.map((document) => {
+          const id = Number(document.id);
+          const url = `/api/backend/documents/${id}/content`;
+          const previewKind = String(document.preview_kind || 'file');
+          return (
+            <div key={id} className="overflow-hidden rounded-xl border">
+              {Boolean(document.has_file) && previewKind === 'image' && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={url} alt={String(document.title || document.file_name || 'Driver document')} className="max-h-72 w-full bg-muted/20 object-contain" />
+              )}
+              {Boolean(document.has_file) && previewKind === 'pdf' && <iframe src={url} title={String(document.title || document.file_name || 'PDF document')} className="h-72 w-full bg-white" />}
+              <div className="flex items-center gap-3 p-3">
+                <FileText className="size-5 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{String(document.document_type || document.title || 'Document')}</p>
+                  <p className="truncate text-xs text-muted-foreground">{String(document.file_name || 'No file uploaded')} · {formatLabel(String(document.source_module || 'operations'))} · {document.uploaded_at ? formatDate(String(document.uploaded_at)) : 'Date unavailable'}{document.uploaded_by ? ` · ${String(document.uploaded_by)}` : ''}</p>
+                </div>
+                {Boolean(document.has_file) && <><Button size="icon" variant="ghost" asChild><a href={url} target="_blank" rel="noreferrer" aria-label="Preview document"><ExternalLink /></a></Button><Button size="icon" variant="ghost" asChild><a href={`${url}?download=1`} aria-label="Download document"><Download /></a></Button></>}
+              </div>
+            </div>
+          );
+        }) : <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No academy or driver documents have been uploaded.</div>}
       </CardContent>
     </Card>
   );

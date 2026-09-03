@@ -1,15 +1,17 @@
 'use client';
 
-import { FormEvent } from 'react';
+import { FormEvent, useState } from 'react';
 import Link from 'next/link';
-import { ValueDisplay } from '@/features/resources/value-display';
+import { formatLabel, ValueDisplay } from '@/features/resources/value-display';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Banknote,
+  Calculator,
   CalendarPlus,
   LoaderCircle,
   RefreshCw,
   Users,
+  Wrench,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiGet, apiPost } from '@/lib/api/client';
@@ -58,6 +60,7 @@ function first(row: Record<string, unknown>, paths: string[]) {
 
 export function RemittanceDashboard() {
   const client = useQueryClient();
+  const [repairBusy, setRepairBusy] = useState('');
   const query = useQuery({
     queryKey: ['remittance-summary'],
     queryFn: () => apiGet<Summary>('remittance/summary'),
@@ -70,6 +73,33 @@ export function RemittanceDashboard() {
       void client.invalidateQueries({ queryKey: ['remittance-summary'] });
     },
   });
+  const recalculate = useMutation({
+    mutationFn: () => apiPost<Record<string, unknown>>('remittance/recalculate'),
+    onSuccess: (result) => {
+      toast.success(result.message);
+      void client.invalidateQueries({ queryKey: ['remittance-summary'] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  async function runRepair(label: string, path: string, confirmation: string) {
+    setRepairBusy(label);
+    try {
+      const preview = await apiPost<Record<string, unknown>>(path, { dry_run: true });
+      const details = Object.entries(preview.data)
+        .filter(([, value]) => ['string', 'number'].includes(typeof value))
+        .slice(0, 10)
+        .map(([key, value]) => `${formatLabel(key)}: ${String(value)}`)
+        .join('\n');
+      if (!window.confirm(`${label} preview\n\n${details}\n\nApply this repair now?`)) return;
+      const result = await apiPost(path, { dry_run: false, confirmation });
+      toast.success(result.message);
+      void client.invalidateQueries({ queryKey: ['remittance-summary'] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `${label} failed.`);
+    } finally {
+      setRepairBusy('');
+    }
+  }
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     generate.mutate(
@@ -257,6 +287,27 @@ export function RemittanceDashboard() {
           </div>
         </>
       )}
+      <Card>
+        <CardHeader>
+          <div>
+            <CardTitle>Ledger integrity and repair</CardTitle>
+            <CardDescription>
+              Repair actions run a read-only preview first and show the detected records before any write is confirmed.
+            </CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={recalculate.isPending || Boolean(repairBusy)} onClick={() => recalculate.mutate()}>
+            {recalculate.isPending ? <LoaderCircle className="animate-spin" /> : <Calculator />}
+            Recalculate active drivers
+          </Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Repair all driver arrears', 'remittance/repair-arrears', 'REPAIR_ALL_ARREARS')}><Wrench />Repair driver arrears</Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Rebuild dues from active contract starts', 'remittance/rebuild-dues', 'REBUILD_ALL_ACTIVE_DUES')}><CalendarPlus />Rebuild dues</Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Repair all payment allocations', 'remittance/repair-payment-allocations', 'REPAIR_ALL_PAYMENT_ALLOCATIONS')}><Wrench />Repair allocations</Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Repair future paid days', 'remittance/repair-future-allocations', 'REPAIR_FUTURE_ALLOCATIONS')}><CalendarPlus />Repair future paid days</Button>
+          <Button variant="outline" disabled={Boolean(repairBusy)} onClick={() => void runRepair('Sync finance records', 'remittance/sync-finance', 'SYNC_REMITTANCE_FINANCE')}><RefreshCw />Sync finance records</Button>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <div>
